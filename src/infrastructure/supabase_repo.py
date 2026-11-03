@@ -63,3 +63,19 @@ class SupabaseRepository:
             .execute()
         )
         return response.data or []
+    def update_email_generated(self, email_id: UUID, subject: str, body_html: str) -> None:
+        """Actualiza el correo con el asunto, cuerpo renderizado y pasa su estado a GENERATED."""
+        data = {
+            "subject": subject,
+            "body_html": body_html,
+            "status": EmailStatus.GENERATED.value,
+        }
+        self.client.table("emails").update(data).eq("id", str(email_id)).execute()
+
+    def update_email_failed(self, email_id: UUID, error_message: str) -> None:
+        """Marca el correo como FAILED registrando el detalle del error para auditoría."""
+        data = {
+            "status": EmailStatus.FAILED.value,
+            "error_message": error_message,
+        }
+        self.client.table("emails").update(data).eq("id", str(email_id)).execute()

@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin: 0; padding: 0; background-color: #ffffff; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 15px; line-height: 1.5; color: #1a1a1a;">
+  <div style="max-width: 600px; margin: 0 auto; padding: 16px 0;">
+    {% for paragraph in body_paragraphs %}
+      <p style="margin: 0 0 16px 0;">{{ paragraph }}</p>
+    {% endfor %}
+
+    {% if sender_name %}
+      <p style="margin: 24px 0 0 0; color: #444444;">
+        Un saludo,<br>
+        <strong>{{ sender_name }}</strong>
+      </p>
+    {% endif %}
+  </div>
+</body>
+</html>
