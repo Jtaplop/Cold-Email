@@ -1,0 +1,6 @@
+.venv/
+.env
+credentials/
+data/inbox_csv/*.csv
+data/processed_csv/*.csv
+__pycache__/
