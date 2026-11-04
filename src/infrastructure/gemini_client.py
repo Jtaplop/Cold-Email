@@ -36,3 +36,23 @@ class GeminiClient:
             raise RuntimeError("Gemini no retornó un esquema estructurado válido.")
 
         return response.parsed
+    
+    def evaluate_email(self, system_instruction: str, evaluation_prompt: str) -> "JudgeVerdictSchema":
+        """Evalúa un correo generado contra la rúbrica de calidad usando salidas estructuradas."""
+        from src.domain.models import JudgeVerdictSchema
+
+        response = self.client.models.generate_content(
+            model="gemini-3.5-flash-lite",
+            contents=evaluation_prompt,
+            config=types.GenerateContentConfig(
+                system_instruction=system_instruction,
+                response_mime_type="application/json",
+                response_schema=JudgeVerdictSchema,
+                temperature=0.1,  # Temperatura baja para consistencia y rigor en la evaluación
+            ),
+        )
+
+        if not response.parsed:
+            raise RuntimeError("El modelo no retornó un veredicto estructurado válido.")
+
+        return response.parsed

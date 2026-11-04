@@ -93,3 +93,43 @@ class SupabaseRepository:
             "processed_at": datetime.now(timezone.utc).isoformat(),
         }
         self.client.table("emails").update(data).eq("id", str(email_id)).execute()
+
+    def update_email_judged(
+        self,
+        email_id: UUID,
+        status: EmailStatus,
+        subject: str,
+        body_html: str,
+        score: int,
+        critique: str,
+    ) -> None:
+        """Persiste el email generado junto con la puntuación y auditoría del Juez."""
+        data = {
+            "subject": subject,
+            "body_html": body_html,
+            "status": status.value,
+            "judge_score": score,
+            "judge_critique": critique,
+        }
+        try:
+            self.client.table("emails").update(data).eq("id", str(email_id)).execute()
+        except Exception:
+            # Fallback en caso de que aún no se hayan creado las columnas en Supabase
+            fallback_data = {
+                "subject": subject,
+                "body_html": body_html,
+                "status": status.value,
+                "error_message": f"Score: {score}/100 | {critique}" if status == EmailStatus.QUEUED_DRAFT else None,
+            }
+            self.client.table("emails").update(fallback_data).eq("id", str(email_id)).execute()
+
+    def fetch_queued_emails_with_prospect(self, statuses: list[str], limit: int = 10) -> list[dict]:
+        """Recupera correos listos según los estados indicados (QUEUED_SEND, QUEUED_DRAFT, GENERATED)."""
+        response = (
+            self.client.table("emails")
+            .select("id, subject, body_html, status, judge_score, judge_critique, prospects(id, email, full_name)")
+            .in_("status", statuses)
+            .limit(limit)
+            .execute()
+        )
+        return response.data or []

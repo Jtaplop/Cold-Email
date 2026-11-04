@@ -57,3 +57,12 @@ class EmailDB(BaseModel):
     error_message: str | None = None
     created_at: datetime
     processed_at: datetime | None = None
+
+class JudgeVerdictSchema(BaseModel):
+    score: int = Field(ge=0, le=100, description="Puntuación de 0 a 100.")
+    passed: bool = Field(description="True si el score >= 80 y no hay violaciones críticas.")
+    critique: str = Field(description="Explicación concisa del motivo del veredicto.")
+    violated_rules: list[str] = Field(
+        default_factory=list, 
+        description="Lista de reglas de la rúbrica que fueron vulneradas."
+    )

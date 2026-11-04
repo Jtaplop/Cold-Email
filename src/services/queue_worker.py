@@ -13,7 +13,7 @@ class QueueWorker:
         repo: SupabaseRepository,
         gmail_client: GmailClient,
         stats: ExecutionStats,
-        mode: str = "draft",  # 'draft' o 'send'
+        mode: str = "draft",
         min_jitter: int = 45,
         max_jitter: int = 110,
     ) -> None:
@@ -25,24 +25,24 @@ class QueueWorker:
         self.max_jitter = max_jitter
 
     async def run(self, producer_finished: asyncio.Event) -> None:
-        """
-        Consumidor asíncrono que sondea correos GENERATED y los despacha.
-        Finaliza cuando el productor termina Y no quedan correos en cola.
-        """
-        print(f"[WORKER] Consumidor iniciado en modo: {self.mode.upper()}")
+        print(f"[WORKER] Consumidor activo en modo: {self.mode.upper()}")
+        target_statuses = (
+            [EmailStatus.QUEUED_SEND.value, EmailStatus.QUEUED_DRAFT.value, EmailStatus.GENERATED.value]
+            if self.mode == "send"
+            else [EmailStatus.QUEUED_DRAFT.value, EmailStatus.QUEUED_SEND.value, EmailStatus.GENERATED.value]
+        )
 
         while True:
-            # 1. Consultar si hay correos listos para despachar
             items = await asyncio.to_thread(
-                self.repo.fetch_generated_emails_with_prospect, limit=5
+                self.repo.fetch_queued_emails_with_prospect,
+                statuses=target_statuses,
+                limit=5,
             )
 
             if not items:
-                # Si el productor ya terminó y la cola está vacía, el worker cierra
                 if producer_finished.is_set():
-                    print("[WORKER] No quedan correos pendientes de despacho. Finalizando consumidor.")
+                    print("[WORKER] Cola de despacho vacía y productor finalizado.")
                     break
-                # Esperar 2 segundos antes de volver a consultar la cola
                 await asyncio.sleep(2)
                 continue
 
@@ -50,6 +50,7 @@ class QueueWorker:
                 email_id = UUID(item["id"])
                 subject = item.get("subject") or "Sin asunto"
                 body_html = item.get("body_html") or ""
+                status_item = item.get("status")
                 prospect = item.get("prospects") or {}
                 recipient = prospect.get("email")
 
@@ -63,8 +64,9 @@ class QueueWorker:
                     continue
 
                 try:
-                    if self.mode == "send":
-                        print(f"[WORKER] Enviando correo a: {recipient}...")
+                    # En modo send, solo se envía en vivo si fue aprobado expresamente
+                    if self.mode == "send" and status_item == EmailStatus.QUEUED_SEND.value:
+                        print(f"[WORKER] Enviando email en vivo a: {recipient}...")
                         msg_id = await asyncio.to_thread(
                             self.gmail.send_message, recipient, subject, body_html
                         )
@@ -76,15 +78,18 @@ class QueueWorker:
                         self.stats.emails_sent += 1
                         print(f"[WORKER-OK] Enviado con éxito (Message ID: {msg_id})")
 
-                        # Jitter aleatorio para proteger entregabilidad
                         pause = random.uniform(self.min_jitter, self.max_jitter)
-                        print(f"[JITTER] Esperando {pause:.1f}s antes del próximo envío...")
+                        print(f"[JITTER] Pausa de {pause:.1f}s antes del próximo envío...")
                         await asyncio.sleep(pause)
 
-                    else:  # Modo 'draft'
+                    else:
+                        # Si es modo draft o si fue reprobado por el Juez en modo send
+                        draft_label = " [REVISIÓN REQUERIDA]" if status_item == EmailStatus.QUEUED_DRAFT.value and self.mode == "send" else ""
+                        actual_subject = f"{subject}{draft_label}"
+
                         print(f"[WORKER] Creando borrador para: {recipient}...")
                         draft_id = await asyncio.to_thread(
-                            self.gmail.create_draft, recipient, subject, body_html
+                            self.gmail.create_draft, recipient, actual_subject, body_html
                         )
                         await asyncio.to_thread(
                             self.repo.update_email_dispatched,
@@ -93,7 +98,6 @@ class QueueWorker:
                         )
                         self.stats.emails_drafted += 1
                         print(f"[WORKER-OK] Borrador creado (Draft ID: {draft_id})")
-                        # Pequeña pausa técnica entre llamadas de API
                         await asyncio.sleep(0.5)
 
                 except Exception as exc:
