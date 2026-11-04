@@ -1,3 +1,4 @@
+import asyncio
 from pathlib import Path
 from uuid import UUID
 from jinja2 import Environment, FileSystemLoader
@@ -74,3 +75,76 @@ class GeneratorService:
                 self.repo.update_email_failed(email_id=email_id, error_message=str(exc))
 
         return success_count
+
+    async def run_producer(
+        self,
+        finished_event: asyncio.Event,
+        stats: "ExecutionStats",
+        limit: int = 50,
+        sender_name: str = "José Tapia",
+    ) -> None:
+        """
+        Corrutina productora: busca correos PENDING, los redacta con Gemini y los pasa a GENERATED.
+        Al vaciar la cola, activa el finished_event.
+        """
+        import asyncio
+
+        print("[PRODUCTOR] Iniciando generación de correos pendientes...")
+        system_instruction = self.prompt_builder.build_system_instruction()
+
+        while True:
+            # Buscar lote de pendientes de forma asíncrona
+            pending_items = await asyncio.to_thread(
+                self.repo.fetch_pending_emails_with_prospect, limit=limit
+            )
+
+            if not pending_items:
+                print("[PRODUCTOR] No hay más correos PENDING en Supabase.")
+                break
+
+            for item in pending_items:
+                email_id = UUID(item["id"])
+                prospect = item.get("prospects") or {}
+                recipient = prospect.get("email", "Desconocido")
+
+                print(f"[PRODUCTOR] Redactando para: {recipient} ({prospect.get('full_name')})")
+
+                try:
+                    user_prompt = self.prompt_builder.build_user_prompt(prospect)
+
+                    # Inferencia de Gemini
+                    result = await asyncio.to_thread(
+                        self.gemini_client.generate_email,
+                        system_instruction,
+                        user_prompt,
+                    )
+
+                    # Renderizado Jinja2
+                    rendered_html = self.html_template.render(
+                        body_paragraphs=result.body_paragraphs,
+                        sender_name=sender_name,
+                    )
+
+                    # Actualizar estado a GENERATED en Supabase
+                    await asyncio.to_thread(
+                        self.repo.update_email_generated,
+                        email_id,
+                        result.subject,
+                        rendered_html,
+                    )
+
+                    stats.emails_generated += 1
+                    print(f"[PRODUCTOR-OK] Generado: '{result.subject}' -> Guardado como GENERATED")
+
+                except Exception as exc:
+                    err_msg = f"Error generando email {email_id}: {exc}"
+                    print(f"[PRODUCTOR-ERROR] {err_msg}")
+                    await asyncio.to_thread(
+                        self.repo.update_email_failed, email_id, str(exc)
+                    )
+                    stats.emails_failed += 1
+                    stats.errors.append(err_msg)
+
+        # Señalizar al worker de que el productor terminó de procesar los PENDING
+        finished_event.set()
+        print("[PRODUCTOR] Generación completada. Señal enviada al consumidor.")
