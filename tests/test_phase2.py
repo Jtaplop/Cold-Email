@@ -1,5 +1,9 @@
-from src.services.generator_service import GeneratorService
-from src.infrastructure.supabase_repo import SupabaseRepository
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from src.services.generation.generator_service import GeneratorService
+from src.infrastructure.database.supabase_repo import SupabaseRepository
 from src.domain.enums import EmailStatus
 
 def run_phase2_test() -> None:

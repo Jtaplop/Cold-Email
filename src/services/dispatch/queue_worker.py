@@ -2,9 +2,9 @@ import asyncio
 import random
 from uuid import UUID
 from src.domain.enums import EmailStatus
-from src.infrastructure.gmail_client import GmailClient
-from src.infrastructure.supabase_repo import SupabaseRepository
-from src.services.stats_reporter import ExecutionStats
+from src.infrastructure.email.gmail_client import GmailClient
+from src.infrastructure.database.supabase_repo import SupabaseRepository
+from src.services.reporting.stats_reporter import ExecutionStats
 
 
 class QueueWorker:

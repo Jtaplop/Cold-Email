@@ -4,11 +4,11 @@ from uuid import UUID
 from jinja2 import Environment, FileSystemLoader
 
 from src.domain.enums import EmailStatus
-from src.infrastructure.gemini_client import GeminiClient
-from src.infrastructure.supabase_repo import SupabaseRepository
-from src.services.judge_service import JudgeService
-from src.services.prompt_builder import PromptBuilder
-from src.services.stats_reporter import ExecutionStats
+from src.infrastructure.ai.gemini_client import GeminiClient
+from src.infrastructure.database.supabase_repo import SupabaseRepository
+from src.services.evaluation.judge_service import JudgeService
+from src.services.generation.prompt_builder import PromptBuilder
+from src.services.reporting.stats_reporter import ExecutionStats
 
 
 class GeneratorService:
@@ -19,7 +19,7 @@ class GeneratorService:
         self.judge_service = JudgeService()
 
         self.jinja_env = Environment(
-            loader=FileSystemLoader("templates"),
+            loader=FileSystemLoader("templates/email"),
             autoescape=True,
             trim_blocks=True,
             lstrip_blocks=True,

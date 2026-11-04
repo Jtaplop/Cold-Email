@@ -3,7 +3,7 @@ import yaml
 
 
 class PromptBuilder:
-    def __init__(self, prompt_yaml_path: Path = Path("templates/generator_prompt.yaml")) -> None:
+    def __init__(self, prompt_yaml_path: Path = Path("templates/prompts/generator_prompt.yaml")) -> None:
         if not prompt_yaml_path.exists():
             raise FileNotFoundError(f"No existe el archivo de prompt: {prompt_yaml_path}")
         

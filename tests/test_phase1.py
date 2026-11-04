@@ -1,6 +1,10 @@
+import sys
 from pathlib import Path
-from src.infrastructure.csv_loader import load_prospects_from_csv
-from src.infrastructure.supabase_repo import SupabaseRepository
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from pathlib import Path
+from src.infrastructure.files.csv_loader import load_prospects_from_csv
+from src.infrastructure.database.supabase_repo import SupabaseRepository
 
 def run_test() -> None:
     csv_path = Path("data/inbox_csv/test_leads.csv")

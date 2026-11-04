@@ -1,11 +1,11 @@
 from pathlib import Path
 import yaml
 from src.domain.models import JudgeVerdictSchema
-from src.infrastructure.gemini_client import GeminiClient
+from src.infrastructure.ai.gemini_client import GeminiClient
 
 
 class JudgeService:
-    def __init__(self, rubric_path: Path = Path("templates/judge_rubric.yaml")) -> None:
+    def __init__(self, rubric_path: Path = Path("templates/prompts/judge_rubric.yaml")) -> None:
         if not rubric_path.exists():
             raise FileNotFoundError(f"No existe el archivo de rúbrica: {rubric_path}")
 

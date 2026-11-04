@@ -1,6 +1,10 @@
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 from uuid import UUID
-from src.infrastructure.gmail_client import GmailClient
-from src.infrastructure.supabase_repo import SupabaseRepository
+from src.infrastructure.email.gmail_client import GmailClient
+from src.infrastructure.database.supabase_repo import SupabaseRepository
 from src.domain.enums import EmailStatus
 
 def run_phase3_test() -> None:

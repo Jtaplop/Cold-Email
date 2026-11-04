@@ -1,8 +1,8 @@
 import sys
 from pathlib import Path
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src.services.judge_service import JudgeService
+from src.services.evaluation.judge_service import JudgeService
 
 def run_phase4_test() -> None:
     print("--- INICIANDO TEST DE FASE 4: EVALUADOR / JUEZ IA ---")

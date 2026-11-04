@@ -3,12 +3,12 @@ import asyncio
 from pathlib import Path
 
 from src.config.settings import settings
-from src.infrastructure.csv_loader import archive_processed_csv, load_prospects_from_csv
-from src.infrastructure.gmail_client import GmailClient
-from src.infrastructure.supabase_repo import SupabaseRepository
-from src.services.generator_service import GeneratorService
-from src.services.queue_worker import QueueWorker
-from src.services.stats_reporter import ExecutionStats
+from src.infrastructure.files.csv_loader import archive_processed_csv, load_prospects_from_csv
+from src.infrastructure.email.gmail_client import GmailClient
+from src.infrastructure.database.supabase_repo import SupabaseRepository
+from src.services.generation.generator_service import GeneratorService
+from src.services.dispatch.queue_worker import QueueWorker
+from src.services.reporting.stats_reporter import ExecutionStats
 
 
 def ingest_csv_files(repo: SupabaseRepository, stats: ExecutionStats) -> None:
