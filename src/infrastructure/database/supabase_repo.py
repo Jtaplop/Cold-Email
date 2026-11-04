@@ -133,3 +133,28 @@ class SupabaseRepository:
             .execute()
         )
         return response.data or []
+
+    def has_existing_email(self, prospect_id: UUID, exclude_failed: bool = True) -> bool:
+        """
+        Comprueba si un prospecto ya tiene un correo registrado en el sistema
+        para evitar duplicidad de envíos o contactos redundantes.
+        """
+        blocking_statuses = [
+            EmailStatus.PENDING.value,
+            EmailStatus.GENERATED.value,
+            EmailStatus.QUEUED_SEND.value,
+            EmailStatus.QUEUED_DRAFT.value,
+            EmailStatus.DRAFTED.value,
+            EmailStatus.SENT.value,
+        ]
+        
+        query = (
+            self.client.table("emails")
+            .select("id")
+            .eq("prospect_id", str(prospect_id))
+            .in_("status", blocking_statuses)
+            .limit(1)
+        )
+        
+        response = query.execute()
+        return len(response.data) > 0

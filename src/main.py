@@ -12,7 +12,7 @@ from src.services.reporting.stats_reporter import ExecutionStats
 
 
 def ingest_csv_files(repo: SupabaseRepository, stats: ExecutionStats) -> None:
-    """Busca CSVs en inbox_csv, inserta prospectos y crea correos PENDING."""
+    """Busca CSVs en inbox_csv, inserta prospectos y crea correos PENDING evitando duplicados."""
     inbox_dir = settings.INBOX_CSV_DIR
     inbox_dir.mkdir(parents=True, exist_ok=True)
     csv_files = list(inbox_dir.glob("*.csv"))
@@ -28,15 +28,27 @@ def ingest_csv_files(repo: SupabaseRepository, stats: ExecutionStats) -> None:
 
         for p in prospects:
             try:
+                # 1. Upsert del prospecto (crea o actualiza sus datos de contacto)
                 prospect_id = repo.upsert_prospect(p)
+
+                # 2. Escudo anti-duplicados: verificar si ya tiene campañas previas
+                if repo.has_existing_email(prospect_id):
+                    print(f"[OMITIDO - DUPLICADO] {p.email} ya tiene un correo activo o enviado.")
+                    stats.csv_leads_skipped += 1
+                    continue
+
+                # 3. Solo se encola si es un lead completamente nuevo o sin campañas
                 repo.create_pending_email(prospect_id)
                 stats.csv_leads_ingested += 1
+                print(f"[ENCOLADO] {p.email} registrado en estado PENDING.")
+
             except Exception as exc:
-                stats.errors.append(f"Fallo persistiendo prospecto {p.email}: {exc}")
+                err_msg = f"Fallo persistiendo prospecto {p.email}: {exc}"
+                print(f"[ERROR] {err_msg}")
+                stats.errors.append(err_msg)
 
         archived = archive_processed_csv(csv_file)
         print(f"[INGESTA-OK] Archivo archivado en: {archived.name}")
-
 
 async def async_pipeline(mode: str, limit: int, skip_ingest: bool) -> None:
     stats = ExecutionStats()
@@ -93,6 +105,8 @@ def parse_arguments() -> argparse.Namespace:
         help="Omite la lectura de archivos CSV y procesa solo lo que ya esté en Supabase.",
     )
     return parser.parse_args()
+
+
 
 
 if __name__ == "__main__":
