@@ -12,6 +12,20 @@ class ProspectBase(BaseModel):
     niche: str | None = None
     comment: str | None = None
 
+    @field_validator("email", mode="before")
+    @classmethod
+    def clean_email(cls, value: str | None) -> str:
+        if not value or not str(value).strip():
+            raise ValueError("Email vacío o nulo")
+        cleaned = str(value).strip()
+        # Si contiene delimitadores habituales, tomar la primera dirección
+        if any(sep in cleaned for sep in ["//", "/", ",", ";", "|"]):
+            parts = re.split(r"[\s/,;|]+", cleaned)
+            for part in parts:
+                if "@" in part and "." in part:
+                    return part.strip()
+        return cleaned
+
     @field_validator("ig_username", mode="before")
     @classmethod
     def clean_ig_username(cls, value: str | None) -> str | None:

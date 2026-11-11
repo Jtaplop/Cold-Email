@@ -1,66 +1,40 @@
-import argparse
-import asyncio
+import sys
 from pathlib import Path
 
-from src.config.settings import settings
-from src.infrastructure.files.csv_loader import archive_processed_csv, load_prospects_from_csv
-from src.infrastructure.email.gmail_client import GmailClient
+# Garantiza que la raíz del proyecto esté en el path de búsqueda de módulos
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+import argparse
+import asyncio
 from src.infrastructure.database.supabase_repo import SupabaseRepository
-from src.services.generation.generator_service import GeneratorService
+from src.infrastructure.email.gmail_client import GmailClient
 from src.services.dispatch.queue_worker import QueueWorker
+from src.services.generation.generator_service import GeneratorService
+from src.services.ingestion.ingestion_service import IngestionService
 from src.services.reporting.stats_reporter import ExecutionStats
 
-
-def ingest_csv_files(repo: SupabaseRepository, stats: ExecutionStats) -> None:
-    """Busca CSVs en inbox_csv, inserta prospectos y crea correos PENDING evitando duplicados."""
-    inbox_dir = settings.INBOX_CSV_DIR
-    inbox_dir.mkdir(parents=True, exist_ok=True)
-    csv_files = list(inbox_dir.glob("*.csv"))
-
-    if not csv_files:
-        print("[INGESTA] No se encontraron archivos CSV en data/inbox_csv/")
-        return
-
-    for csv_file in csv_files:
-        print(f"\n[INGESTA] Procesando archivo: {csv_file.name}")
-        prospects = load_prospects_from_csv(csv_file)
-        stats.csv_leads_found += len(prospects)
-
-        for p in prospects:
-            try:
-                # 1. Upsert del prospecto (crea o actualiza sus datos de contacto)
-                prospect_id = repo.upsert_prospect(p)
-
-                # 2. Escudo anti-duplicados: verificar si ya tiene campañas previas
-                if repo.has_existing_email(prospect_id):
-                    print(f"[OMITIDO - DUPLICADO] {p.email} ya tiene un correo activo o enviado.")
-                    stats.csv_leads_skipped += 1
-                    continue
-
-                # 3. Solo se encola si es un lead completamente nuevo o sin campañas
-                repo.create_pending_email(prospect_id)
-                stats.csv_leads_ingested += 1
-                print(f"[ENCOLADO] {p.email} registrado en estado PENDING.")
-
-            except Exception as exc:
-                err_msg = f"Fallo persistiendo prospecto {p.email}: {exc}"
-                print(f"[ERROR] {err_msg}")
-                stats.errors.append(err_msg)
-
-        archived = archive_processed_csv(csv_file)
-        print(f"[INGESTA-OK] Archivo archivado en: {archived.name}")
-
-async def async_pipeline(mode: str, limit: int, skip_ingest: bool) -> None:
+async def async_pipeline(
+    mode: str,
+    limit: int,
+    skip_ingest: bool,
+    sheet: str | None = None,
+    drive_folder_id: str | None = None,
+) -> None:
     stats = ExecutionStats()
     repo = SupabaseRepository()
 
-    # 1. Ingesta de archivos CSV (si no se omitió)
+    # 1. Sincronización dinámica desde Google Drive
     if not skip_ingest:
-        ingest_csv_files(repo, stats)
+        ingestion_service = IngestionService(repo=repo)
+        ingestion_service.ingest(
+            stats=stats,
+            sheet_filter=sheet,
+            drive_folder_id=drive_folder_id,
+        )
     else:
-        print("[INFO] Bandera --skip-ingest activa. Omitiendo lectura de CSV.")
+        print("[INFO] Bandera --skip-ingest activa. Omitiendo lectura de Sheets.")
 
-    # 2. Inicialización de clientes y servicios
+    # 2. Clientes y servicios
     gmail_client = GmailClient()
     generator = GeneratorService()
     worker = QueueWorker(
@@ -69,7 +43,6 @@ async def async_pipeline(mode: str, limit: int, skip_ingest: bool) -> None:
         stats=stats,
         mode=mode,
     )
-
     producer_finished = asyncio.Event()
 
     # 3. Lanzar Productor y Consumidor concurrentemente
@@ -85,13 +58,13 @@ async def async_pipeline(mode: str, limit: int, skip_ingest: bool) -> None:
 
 def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Cold Email Engine: Motor automatizado de prospección con IA y Gmail API."
+        description="Cold Email Engine: Motor automatizado con Sheets dinámicos, Gemini y Gmail API."
     )
     parser.add_argument(
         "--mode",
         choices=["draft", "send"],
         default="draft",
-        help="Modo de ejecución: 'draft' crea borradores en Gmail; 'send' envía correos reales con jitter.",
+        help="Modo de ejecución: 'draft' crea borradores en Gmail; 'send' envía correos con jitter.",
     )
     parser.add_argument(
         "--limit",
@@ -102,11 +75,21 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         "--skip-ingest",
         action="store_true",
-        help="Omite la lectura de archivos CSV y procesa solo lo que ya esté en Supabase.",
+        help="Omite la sincronización con Drive y procesa lo que ya está en Supabase.",
+    )
+    parser.add_argument(
+        "--sheet",
+        type=str,
+        default=None,
+        help="Nombre o tópico del Sheet a procesar (ej. 'psicologia', 'fitness', o 'all'). Si no se indica, se muestra un menú interactivo.",
+    )
+    parser.add_argument(
+        "--drive-folder-id",
+        type=str,
+        default=None,
+        help="ID de carpeta en Google Drive (invalida el valor de .env).",
     )
     return parser.parse_args()
-
-
 
 
 if __name__ == "__main__":
@@ -116,5 +99,7 @@ if __name__ == "__main__":
             mode=args.mode,
             limit=args.limit,
             skip_ingest=args.skip_ingest,
+            sheet=args.sheet,
+            drive_folder_id=args.drive_folder_id,
         )
     )
